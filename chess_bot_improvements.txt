@@ -1,0 +1,156 @@
+---------------------------------- CHESS BOT IMPROVEMENTS ----------------------------------
+1. Add value network ✓
+2. Add self-play ✓
+3. Implement or use a different opponent for black (like stockfish)
+4. Implement the rollout phase (in the evaluation phase) with wins/losses/draws
+5. Maybe add temperature annealing
+6. Fix the move_to_int and heavy_move_to_int problem by retraining the model with move_to_int ✓
+7. Improve the value network (make the data not come starting from the first game and moving on from that)
+8. Maybe in the MCTS, check if the position reached is terminal before expanding ✓
+
+self-play_games.pkl                      -> games that got generated from the self-play.py file before parallelization or any computation time optimization (with 13 feature networks)
+filtered_positions_from_database.pkl     -> 500k samples (games from move 20+ only) from positions from the database
+self-play_games_filtered_positions.pkl   -> randomly chosen positions from filtered_positions_from_database.pkl get chosen and MCTS is then applied till the games finish (material difference of 8+), (with 13 feature networks)
+self-play_games_filtered_positions_2.pkl -> randomly chosen positions from filtered_positions_from_database.pkl get chosen and MCTS is then applied till the games finish (material difference of 8+), (with 15 feature networks)
+
+POLICY/VALUE_MODEL_10EPOCHS.pth    -> models that are trained with 13 features (no side-to-move) (10 epochs)
+POLICY/VALUE_MODEL_10EPOCHS_V1.pth -> models that are trained on top of POLICY/VALUE_MODEL_10EPOCHS models with self-play generated data (10 epochs, 30k samples)
+POLICY/VALUE_MODEL_10EPOCHS_V2.pth -> models that are trained on top of POLICY/VALUE_MODEL_10EPOCHS models with self-play generated data (10 epochs, 200k samples)
+
+POLICY_MODEL_50EPOCHS.pth          -> model that is trained with 15 features (with side-to-move and from where pieces can move), (50 epochs, 1.5m samples)
+VALUE_MODEL_100EPOCHS.pth          -> model that is trained with 13 features (with side-to-move), (10 epochs, 3.3m samples)
+POLICY_MODEL_50EPOCHS_V1.pth       -> model that is trained on top of POLICY_MODEL_50EPOCHS model with self-play generated data (with side-to-move and from where pieces can move), (100 epochs, 200k samples)
+VALUE_MODEL_100EPOCHS_V1.pth       -> model that is trained on top of VALUE_MODEL_100EPOCHS model with self-play generated data (with side-to-move), (100 epochs, 200k samples)
+
+
+------------------ Self-play procedure - results -----------------
+1. Models: 
+        Policy -> 13 features (no side-to-move, no from where pieces can move)
+        Value  -> 12 features (no side-to-move, no from where pieces can move)
+        Training: Policy (10 epochs, 800k)
+                  Value  (10 epochs, 800k)
+   Self-play:
+        MCTS: 100 simulations
+        Samples: 30k
+            - Games start from the initial position
+            - No early termination
+            - No parallelization
+    Self-play Training:
+        Policy -> 10 epochs (POLICY_MODEL_10EPOCHS_V1.pth)
+        Value  -> 10 epochs (VALUE_MODEL_10EPOCHS_V1.pth)
+    Testing:
+        - MCTS: 200 simulations
+        - games get played until real termination
+        - Moves get chosen stochastically from the MCTS
+    Results:
+        - Networks did not learn much and they got worse (limited amount of samples or/and insufficient network features)
+        - Old > New (500 games)
+
+2. Models: 
+        Policy -> 13 features (no side-to-move, no from where pieces can move)
+        Value  -> 12 features (no side-to-move, no from where pieces can move)
+        Training: Policy (10 epochs, 800k)
+                  Value  (10 epochs, 800k)
+   Self-play:
+        MCTS: 100 simulations
+        Samples: 200k
+            - Games start from the middle-game from database games (move 20+)
+            - Early termination (material difference 8+)
+            - Parallelization
+    Self-play Training:
+        Policy -> 10 epochs (POLICY_MODEL_10EPOCHS_V2.pth)
+        Value  -> 10 epochs (VALUE_MODEL_10EPOCHS_V2.pth)
+    Testing:
+        - MCTS: 200 simulations
+        - games get played until real termination
+        - Moves get chosen stochastically from the MCTS
+    Results:
+        - Networks did not learn much and they got worse (limited amount of samples or/and insufficient network features)
+        - Old > New (500 games)
+
+3. Models: 
+        Policy -> 15 features
+        Value  -> 13 features
+        Training: Policy (50 epochs, 1.5m)
+                  Value  (10 epochs, 3.3m)
+   Self-play:
+        MCTS: 100 simulations
+        Samples: 200k
+            - Games start from the middle-game from database games (move 20+)
+            - Early termination (material difference 8+)
+            - Parallelization
+    Self-play Training:
+        Policy -> 100 epochs (POLICY_MODEL_50EPOCHS_V1.pth)
+        Value  -> 100 epochs (VALUE_MODEL_100EPOCHS_V1.pth)
+    Testing:
+        - MCTS: 200 simulations
+        - games get played until real termination
+        - Moves get chosen stochastically from the MCTS
+    Results:
+        - Old > New (700 games)
+        - Old: 121 (wins), New: 32 (wins), Draws: 547
+
+
+
+-------- Model & Training Improvements --------
+1.Add a Value Head (Value Network):
+Currently, your model predicts only move probabilities (policy). Adding a value head to predict the expected outcome (win/draw/loss) helps MCTS evaluate leaf nodes more meaningfully.
+This is what AlphaZero-style networks do: a dual-headed network with policy + value.
+
+2.Use Residual Blocks Instead of Plain Conv Layers:
+Instead of two conv layers, consider using deeper residual CNN blocks (ResNet style). This usually leads to better feature extraction and stronger play.
+
+3.Data Augmentation:
+You can augment your training data by flipping the board horizontally/vertically and adjusting moves accordingly, to get more training samples.
+
+4.Better Move Encoding:
+Your move encoding uses a dictionary based on unique moves in the dataset. Moves like promotions and castling can be handled explicitly or encoded more systematically for better generalization.
+
+5.Increase Training Epochs & Use Validation:
+1 epoch is very little for a chess bot. Train for many epochs with a validation set to monitor overfitting.
+
+6.Train on Larger Dataset & Use Distributed Training:
+Using more PGN files and possibly parallelizing training could boost strength.
+
+--------MCTS & Search Improvements--------
+1.Incorporate a Value Network in MCTS:
+Right now, your evaluate_leaf uses the policy probabilities to estimate value, which is very simplistic.
+Adding a trained value network head will improve leaf evaluation.
+
+2.Add Dirichlet Noise & Exploration:
+For better exploration in MCTS, add Dirichlet noise to root priors like AlphaZero does, preventing premature convergence to a single move.
+
+3.Use Temperature Parameters in Move Selection:
+To balance exploration vs exploitation when picking moves, use a temperature parameter that can be adjusted dynamically.
+
+4.Increase Number of Simulations:
+10 simulations per move is very low for a strong MCTS. You can increase to hundreds or thousands depending on compute.
+
+--------Code & Engineering Improvements--------
+1.Separate Model Initialization from Prediction:
+Your predict_move loads the model every time it’s called, which is inefficient. Load once, then reuse.
+
+2.Batch Prediction for Speed:
+If you want to evaluate multiple positions or candidate moves, batch inputs through the network for faster inference.
+
+3.More Robust Legal Move Handling:
+Ensure move mappings cover all legal moves, handle edge cases like underpromotion.
+
+4.Logging & Visualization:
+Add logging of training progress, MCTS statistics (visit counts), and visualize game trees or heatmaps of move probabilities.
+
+5.Save Checkpoints & Resume Training:
+Save intermediate model checkpoints and add ability to resume training.
+
+6.Use Type Hints and Docstrings:
+Improves readability and maintainability.
+
+--------Potential Advanced Improvements--------
+1.Self-Play Training:
+Use your trained model + MCTS to generate self-play games, then train on these new games iteratively.
+
+2.Use Transformer-Based Models:
+Instead of CNNs, experiment with attention mechanisms for better long-range interactions.
+
+3.Incorporate Domain Knowledge:
+Add handcrafted features (e.g., material count, piece-square tables) as input channels alongside raw board representation.
