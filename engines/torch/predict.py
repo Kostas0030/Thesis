@@ -17,7 +17,7 @@ def initialize_policy_model(device):
         move_to_int = pickle.load(file)
 
     policy_model = PolicyNet(num_classes=len(move_to_int))
-    policy_model.load_state_dict(torch.load("models/POLICY_MODEL_50EPOCHS.pth"))
+    policy_model.load_state_dict(torch.load("/content/drive/MyDrive/Thesis/models/POLICY_MODEL_50EPOCHS.pth"))
     policy_model.to(device)
     policy_model.eval()
 
@@ -34,7 +34,7 @@ returns: value_model
 """
 def initialize_value_model(device):
     value_model = ValueNet()
-    value_model.load_state_dict(torch.load("models/VALUE_MODEL_100EPOCHS.pth"))
+    value_model.load_state_dict(torch.load("/content/drive/MyDrive/Thesis/models/VALUE_MODEL_100EPOCHS.pth"))
     value_model.to(device)
     value_model.eval()
 
@@ -74,4 +74,5 @@ def main():
     print(pgn_game)
 
 if __name__ == "__main__":
+
     main()
